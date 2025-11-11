@@ -45,7 +45,7 @@ export const ChatInput = ({ onSend, isLoading }: ChatInputProps) => {
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder="Type your message or choose a prompt template... (Shift+Enter for new line)"
+          placeholder="Ask Mani Anything — powered by ManiEcho."
           className="min-h-[60px] max-h-[200px] resize-none bg-background border-input focus-visible:ring-2 focus-visible:ring-primary transition-all"
           disabled={isLoading}
         />
