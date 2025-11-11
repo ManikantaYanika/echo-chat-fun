@@ -1,19 +1,10 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import type { User } from '@supabase/supabase-js';
 
 type Message = { role: "user" | "assistant"; content: string };
 
 const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/chat`;
-
-// Get or create conversation ID in localStorage
-const getConversationId = () => {
-  let conversationId = localStorage.getItem('currentConversationId');
-  if (!conversationId) {
-    conversationId = crypto.randomUUID();
-    localStorage.setItem('currentConversationId', conversationId);
-  }
-  return conversationId;
-};
 
 async function streamChat({
   messages,
@@ -90,45 +81,58 @@ async function streamChat({
   onDone();
 }
 
-export const useChat = () => {
+export const useChat = (initialConversationId?: string) => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [conversationId, setConversationId] = useState<string>('');
+  const [user, setUser] = useState<User | null>(null);
 
-  // Load messages from database on mount
+  // Load user and conversation on mount
   useEffect(() => {
+    supabase.auth.getUser().then(({ data }) => {
+      setUser(data.user);
+    });
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_, session) => {
+      setUser(session?.user ?? null);
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  // Load conversation when user or conversationId changes
+  useEffect(() => {
+    if (!user) return;
+
     const loadConversation = async () => {
-      const convId = getConversationId();
-      setConversationId(convId);
+      let convId = initialConversationId || conversationId;
 
-      // Check if conversation exists in database
-      const { data: conversation } = await supabase
-        .from('conversations')
-        .select('id')
-        .eq('id', convId)
-        .single();
+      if (!convId) {
+        convId = crypto.randomUUID();
+        setConversationId(convId);
 
-      if (!conversation) {
-        // Create conversation if it doesn't exist
+        // Create new conversation
         await supabase
           .from('conversations')
-          .insert({ id: convId, title: 'New Chat' });
-      }
+          .insert({ id: convId, title: 'New Chat', user_id: user.id });
+      } else {
+        setConversationId(convId);
 
-      // Load messages
-      const { data: messagesData } = await supabase
-        .from('messages')
-        .select('*')
-        .eq('conversation_id', convId)
-        .order('created_at', { ascending: true });
+        // Load messages
+        const { data: messagesData } = await supabase
+          .from('messages')
+          .select('*')
+          .eq('conversation_id', convId)
+          .order('created_at', { ascending: true });
 
-      if (messagesData) {
-        setMessages(messagesData.map(m => ({ role: m.role as "user" | "assistant", content: m.content })));
+        if (messagesData) {
+          setMessages(messagesData.map(m => ({ role: m.role as "user" | "assistant", content: m.content })));
+        }
       }
     };
 
     loadConversation();
-  }, []);
+  }, [user, initialConversationId]);
 
   // Save message to database
   const saveMessage = async (message: Message) => {
@@ -225,5 +229,24 @@ export const useChat = () => {
     }
   };
 
-  return { messages, sendMessage, isLoading, regenerateLastResponse };
+  const clearConversation = () => {
+    setMessages([]);
+    const newConvId = crypto.randomUUID();
+    setConversationId(newConvId);
+    if (user) {
+      supabase
+        .from('conversations')
+        .insert({ id: newConvId, title: 'New Chat', user_id: user.id });
+    }
+  };
+
+  return { 
+    messages, 
+    sendMessage, 
+    isLoading, 
+    regenerateLastResponse, 
+    conversationId,
+    clearConversation,
+    user
+  };
 };
