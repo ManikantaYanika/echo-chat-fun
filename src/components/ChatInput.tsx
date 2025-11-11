@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { PromptLibrary } from "@/components/PromptLibrary";
 import { Send } from "lucide-react";
 
 interface ChatInputProps {
@@ -10,6 +11,10 @@ interface ChatInputProps {
 
 export const ChatInput = ({ onSend, isLoading }: ChatInputProps) => {
   const [input, setInput] = useState("");
+
+  const handlePromptSelect = (prompt: string) => {
+    setInput(prompt);
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -27,27 +32,32 @@ export const ChatInput = ({ onSend, isLoading }: ChatInputProps) => {
   };
 
   return (
-    <form 
-      onSubmit={handleSubmit} 
-      className="flex gap-3 p-6 bg-card border-t border-border"
-      style={{ boxShadow: 'var(--shadow-lg)' }}
-    >
-      <Textarea
-        value={input}
-        onChange={(e) => setInput(e.target.value)}
-        onKeyDown={handleKeyDown}
-        placeholder="Type your message... (Shift+Enter for new line)"
-        className="min-h-[60px] max-h-[200px] resize-none bg-background border-input focus-visible:ring-2 focus-visible:ring-primary transition-all"
-        disabled={isLoading}
-      />
-      <Button
-        type="submit"
-        disabled={!input.trim() || isLoading}
-        className="h-[60px] px-6 bg-gradient-to-r from-primary to-secondary hover:opacity-90 transition-all hover:scale-105"
-        style={{ boxShadow: 'var(--shadow-md)' }}
+    <div className="space-y-3">
+      <div className="flex justify-end">
+        <PromptLibrary onSelectPrompt={handlePromptSelect} />
+      </div>
+      
+      <form 
+        onSubmit={handleSubmit} 
+        className="flex gap-3"
       >
-        <Send className="h-5 w-5" />
-      </Button>
-    </form>
+        <Textarea
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          onKeyDown={handleKeyDown}
+          placeholder="Type your message or choose a prompt template... (Shift+Enter for new line)"
+          className="min-h-[60px] max-h-[200px] resize-none bg-background border-input focus-visible:ring-2 focus-visible:ring-primary transition-all"
+          disabled={isLoading}
+        />
+        <Button
+          type="submit"
+          disabled={!input.trim() || isLoading}
+          className="h-[60px] px-6 bg-gradient-to-r from-primary to-primary/80 hover:opacity-90 transition-all hover:scale-105"
+          style={{ boxShadow: 'var(--shadow-md)' }}
+        >
+          <Send className="h-5 w-5" />
+        </Button>
+      </form>
+    </div>
   );
 };
