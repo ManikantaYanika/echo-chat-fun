@@ -27,19 +27,24 @@ export const ChatInput = ({ onSend, isLoading }: ChatInputProps) => {
   };
 
   return (
-    <form onSubmit={handleSubmit} className="flex gap-3 p-6 bg-card border-t border-border">
+    <form 
+      onSubmit={handleSubmit} 
+      className="flex gap-3 p-6 bg-card border-t border-border"
+      style={{ boxShadow: 'var(--shadow-lg)' }}
+    >
       <Textarea
         value={input}
         onChange={(e) => setInput(e.target.value)}
         onKeyDown={handleKeyDown}
-        placeholder="Type your message..."
-        className="min-h-[60px] max-h-[200px] resize-none bg-background border-input"
+        placeholder="Type your message... (Shift+Enter for new line)"
+        className="min-h-[60px] max-h-[200px] resize-none bg-background border-input focus-visible:ring-2 focus-visible:ring-primary transition-all"
         disabled={isLoading}
       />
       <Button
         type="submit"
         disabled={!input.trim() || isLoading}
-        className="h-[60px] px-6 bg-gradient-to-r from-primary to-secondary hover:opacity-90 transition-opacity"
+        className="h-[60px] px-6 bg-gradient-to-r from-primary to-secondary hover:opacity-90 transition-all hover:scale-105"
+        style={{ boxShadow: 'var(--shadow-md)' }}
       >
         <Send className="h-5 w-5" />
       </Button>

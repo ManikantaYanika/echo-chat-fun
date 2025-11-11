@@ -1,8 +1,19 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { supabase } from '@/integrations/supabase/client';
 
 type Message = { role: "user" | "assistant"; content: string };
 
 const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/chat`;
+
+// Get or create conversation ID in localStorage
+const getConversationId = () => {
+  let conversationId = localStorage.getItem('currentConversationId');
+  if (!conversationId) {
+    conversationId = crypto.randomUUID();
+    localStorage.setItem('currentConversationId', conversationId);
+  }
+  return conversationId;
+};
 
 async function streamChat({
   messages,
@@ -82,10 +93,60 @@ async function streamChat({
 export const useChat = () => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [conversationId, setConversationId] = useState<string>('');
+
+  // Load messages from database on mount
+  useEffect(() => {
+    const loadConversation = async () => {
+      const convId = getConversationId();
+      setConversationId(convId);
+
+      // Check if conversation exists in database
+      const { data: conversation } = await supabase
+        .from('conversations')
+        .select('id')
+        .eq('id', convId)
+        .single();
+
+      if (!conversation) {
+        // Create conversation if it doesn't exist
+        await supabase
+          .from('conversations')
+          .insert({ id: convId, title: 'New Chat' });
+      }
+
+      // Load messages
+      const { data: messagesData } = await supabase
+        .from('messages')
+        .select('*')
+        .eq('conversation_id', convId)
+        .order('created_at', { ascending: true });
+
+      if (messagesData) {
+        setMessages(messagesData.map(m => ({ role: m.role as "user" | "assistant", content: m.content })));
+      }
+    };
+
+    loadConversation();
+  }, []);
+
+  // Save message to database
+  const saveMessage = async (message: Message) => {
+    if (!conversationId) return;
+    
+    await supabase
+      .from('messages')
+      .insert({
+        conversation_id: conversationId,
+        role: message.role,
+        content: message.content
+      });
+  };
 
   const sendMessage = async (input: string) => {
     const userMsg: Message = { role: "user", content: input };
     setMessages(prev => [...prev, userMsg]);
+    await saveMessage(userMsg);
     setIsLoading(true);
 
     let assistantSoFar = "";
@@ -104,7 +165,11 @@ export const useChat = () => {
       await streamChat({
         messages: [...messages, userMsg],
         onDelta: (chunk) => upsertAssistant(chunk),
-        onDone: () => setIsLoading(false),
+        onDone: async () => {
+          setIsLoading(false);
+          // Save complete assistant message
+          await saveMessage({ role: "assistant", content: assistantSoFar });
+        },
       });
     } catch (e) {
       console.error(e);
@@ -112,5 +177,53 @@ export const useChat = () => {
     }
   };
 
-  return { messages, sendMessage, isLoading };
+  const regenerateLastResponse = async () => {
+    if (messages.length < 2) return;
+    
+    // Remove last assistant message
+    const messagesWithoutLast = messages.slice(0, -1);
+    setMessages(messagesWithoutLast);
+    
+    // Delete last message from database
+    await supabase
+      .from('messages')
+      .delete()
+      .eq('conversation_id', conversationId)
+      .order('created_at', { ascending: false })
+      .limit(1);
+    
+    // Get the last user message
+    const lastUserMessage = messagesWithoutLast[messagesWithoutLast.length - 1];
+    if (lastUserMessage?.role === 'user') {
+      setIsLoading(true);
+      let assistantSoFar = "";
+      
+      const upsertAssistant = (nextChunk: string) => {
+        assistantSoFar += nextChunk;
+        setMessages(prev => {
+          const last = prev[prev.length - 1];
+          if (last?.role === "assistant") {
+            return prev.map((m, i) => (i === prev.length - 1 ? { ...m, content: assistantSoFar } : m));
+          }
+          return [...prev, { role: "assistant", content: assistantSoFar }];
+        });
+      };
+
+      try {
+        await streamChat({
+          messages: messagesWithoutLast,
+          onDelta: (chunk) => upsertAssistant(chunk),
+          onDone: async () => {
+            setIsLoading(false);
+            await saveMessage({ role: "assistant", content: assistantSoFar });
+          },
+        });
+      } catch (e) {
+        console.error(e);
+        setIsLoading(false);
+      }
+    }
+  };
+
+  return { messages, sendMessage, isLoading, regenerateLastResponse };
 };

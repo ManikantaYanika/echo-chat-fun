@@ -5,7 +5,7 @@ import { ChatInput } from "@/components/ChatInput";
 import { Bot, Sparkles } from "lucide-react";
 
 const Index = () => {
-  const { messages, sendMessage, isLoading } = useChat();
+  const { messages, sendMessage, isLoading, regenerateLastResponse } = useChat();
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -53,7 +53,12 @@ const Index = () => {
           ) : (
             <>
               {messages.map((msg, idx) => (
-                <ChatMessage key={idx} role={msg.role} content={msg.content} />
+                <ChatMessage 
+                  key={idx} 
+                  role={msg.role} 
+                  content={msg.content}
+                  onRegenerate={msg.role === 'assistant' && idx === messages.length - 1 ? regenerateLastResponse : undefined}
+                />
               ))}
               {isLoading && (
                 <div className="flex gap-4 p-6 bg-background">
